@@ -354,11 +354,6 @@ def launch_gui() -> None:
     front_path = tk.StringVar()
     back_path = tk.StringVar()
 
-    front_preview_label = ttk.Label(root)
-    back_preview_label = ttk.Label(root)
-    front_preview_label.image = None
-    back_preview_label.image = None
-
     def choose_front() -> None:
         picked = filedialog.askopenfilename(
             title="Select front card image",
@@ -433,8 +428,15 @@ def launch_gui() -> None:
     right_panel = ttk.LabelFrame(previews, text="Back diagnostics", padding=8)
     right_panel.pack(side="left", fill="both", expand=True, padx=(6, 0))
 
-    front_preview_label.pack(in_=left_panel, fill="both", expand=True)
-    back_preview_label.pack(in_=right_panel, fill="both", expand=True)
+    # Create preview labels with the correct parent containers so images render reliably.
+    front_preview_label = ttk.Label(left_panel, anchor="center")
+    back_preview_label = ttk.Label(right_panel, anchor="center")
+    front_preview_label.pack(fill="both", expand=True)
+    back_preview_label.pack(fill="both", expand=True)
+
+    # Keep explicit references to prevent Tk image garbage collection.
+    front_preview_label.image = None
+    back_preview_label.image = None
 
     output = tk.Text(root, width=110, height=10, wrap="word", state="disabled")
     output.pack(fill="x", padx=10, pady=(0, 10))
