@@ -29,6 +29,7 @@ The GUI provides:
 - a **Select Front** button to choose the front image
 - a **Select Back** button for an optional back image
 - a **Start Grading** button to run grading and display the results
+- a **diagnostic view** of front/back cards with centering markers and red surface-imperfection points
 
 ## Input recommendations
 
