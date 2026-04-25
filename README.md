@@ -8,7 +8,7 @@ This project provides a practical **computer-vision baseline** for checking card
 
 > ⚠️ This is **not** an official TAG Grading implementation. It is an educational approximation you can tune with your own card scan dataset.
 
-## Quick start
+## Quick start (CLI)
 
 ```bash
 python -m venv .venv
@@ -16,6 +16,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python grade_card.py --front examples/sample_front.jpg --back examples/sample_back.jpg --json
 ```
+
+## GUI mode (file picker + grading button)
+
+If you prefer a desktop window:
+
+```bash
+python grade_card.py --gui
+```
+
+The GUI provides:
+- a **Select Front** button to choose the front image
+- a **Select Back** button for an optional back image
+- a **Start Grading** button to run grading and display the results
 
 ## Input recommendations
 
@@ -47,6 +60,7 @@ python grade_card.py --front path/to/front.jpg [--back path/to/back.jpg] [--json
 ```
 
 - `--json`: print machine-readable output.
+- `--gui`: open the graphical interface instead of CLI input.
 
 ## Limitations
 

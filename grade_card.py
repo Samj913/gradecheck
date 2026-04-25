@@ -4,7 +4,7 @@ import argparse
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 from PIL import Image, ImageFilter
@@ -48,10 +48,7 @@ class TagLikeCardGrader:
 
     @staticmethod
     def _crop_to_card_region(img: np.ndarray) -> np.ndarray:
-        """
-        Roughly isolate the card if there is a plain background.
-        Falls back to original if no confident crop.
-        """
+        """Roughly isolate the card if there is a plain background."""
         gray = img.mean(axis=2)
         border_samples = np.concatenate(
             [
@@ -77,9 +74,7 @@ class TagLikeCardGrader:
         return img[y0 : y1 + 1, x0 : x1 + 1]
 
     def _estimate_inner_art_bounds(self, gray: np.ndarray) -> Tuple[int, int, int, int]:
-        """
-        Estimate where the high-detail artwork starts by scanning inward from each side.
-        """
+        """Estimate where the high-detail artwork starts by scanning inward."""
         h, w = gray.shape
         row_std = gray.std(axis=1)
         col_std = gray.std(axis=0)
@@ -101,7 +96,6 @@ class TagLikeCardGrader:
             int(w * 0.08),
         )
 
-        # Clamp to avoid degenerate values
         top = int(np.clip(top, 1, h // 3))
         bottom = int(np.clip(bottom, 1, h // 3))
         left = int(np.clip(left, 1, w // 3))
@@ -110,10 +104,7 @@ class TagLikeCardGrader:
 
     @staticmethod
     def _ratio_score(balance_ratio: float) -> float:
-        """
-        Convert centering balance into an approximate 1-10 score.
-        ratio=1.0 is perfect; lower values are less centered.
-        """
+        """Convert centering balance into an approximate 1-10 score."""
         ratio = float(np.clip(balance_ratio, 0.0, 1.0))
         if ratio >= 0.95:
             return 10.0
@@ -139,7 +130,6 @@ class TagLikeCardGrader:
 
         lr_ratio = min(left, right) / max(left, right)
         tb_ratio = min(top, bottom) / max(top, bottom)
-
         center_score = (self._ratio_score(lr_ratio) + self._ratio_score(tb_ratio)) / 2.0
         return float(lr_ratio), float(tb_ratio), float(center_score)
 
@@ -153,7 +143,6 @@ class TagLikeCardGrader:
         high_freq = np.abs(arr - smooth)
         anomaly_density = float((high_freq > self.anomaly_threshold).mean())
 
-        # Lower anomaly density -> higher score
         if anomaly_density < 0.015:
             score = 10.0
         elif anomaly_density < 0.025:
@@ -237,16 +226,107 @@ class TagLikeCardGrader:
         )
 
 
+def format_checks(checks: CardChecks) -> str:
+    return "\n".join(
+        [
+            "=== Pokémon Card Check (TAG-style baseline) ===",
+            f"Centering L/R ratio : {checks.centering_lr_ratio:.3f}",
+            f"Centering T/B ratio : {checks.centering_tb_ratio:.3f}",
+            f"Centering score     : {checks.centering_score:.2f}/10",
+            f"Surface anomaly     : {checks.surface_anomaly_density:.4f}",
+            f"Surface score       : {checks.surface_score:.2f}/10",
+            f"Edge whitening      : {checks.edge_whitening_ratio:.4f}",
+            f"Edge score          : {checks.edge_score:.2f}/10",
+            f"Overall score       : {checks.overall_score:.2f}/10",
+        ]
+    )
+
+
+def launch_gui() -> None:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+
+    grader = TagLikeCardGrader()
+
+    root = tk.Tk()
+    root.title("Pokémon Card Grading Check")
+    root.geometry("740x420")
+
+    front_path = tk.StringVar()
+    back_path = tk.StringVar()
+
+    def choose_front() -> None:
+        picked = filedialog.askopenfilename(
+            title="Select front card image",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff")],
+        )
+        if picked:
+            front_path.set(picked)
+
+    def choose_back() -> None:
+        picked = filedialog.askopenfilename(
+            title="Select back card image (optional)",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff")],
+        )
+        if picked:
+            back_path.set(picked)
+
+    def run_grading() -> None:
+        if not front_path.get().strip():
+            messagebox.showerror("Missing front image", "Please choose a front card image first.")
+            return
+
+        try:
+            front = Path(front_path.get())
+            back = Path(back_path.get()) if back_path.get().strip() else None
+            checks = grader.grade(front=front, back=back)
+            output.configure(state="normal")
+            output.delete("1.0", tk.END)
+            output.insert(tk.END, format_checks(checks))
+            output.configure(state="disabled")
+        except Exception as exc:  # Best-effort UI error path
+            messagebox.showerror("Grading failed", f"Could not grade card image(s):\n{exc}")
+
+    frm = ttk.Frame(root, padding=12)
+    frm.pack(fill="both", expand=True)
+
+    ttk.Label(frm, text="Front image:").grid(row=0, column=0, sticky="w", pady=6)
+    ttk.Entry(frm, textvariable=front_path, width=70).grid(row=0, column=1, sticky="ew", pady=6)
+    ttk.Button(frm, text="Select Front", command=choose_front).grid(row=0, column=2, padx=(8, 0), pady=6)
+
+    ttk.Label(frm, text="Back image (optional):").grid(row=1, column=0, sticky="w", pady=6)
+    ttk.Entry(frm, textvariable=back_path, width=70).grid(row=1, column=1, sticky="ew", pady=6)
+    ttk.Button(frm, text="Select Back", command=choose_back).grid(row=1, column=2, padx=(8, 0), pady=6)
+
+    ttk.Button(frm, text="Start Grading", command=run_grading).grid(row=2, column=1, sticky="w", pady=(10, 10))
+
+    output = tk.Text(frm, width=90, height=15, wrap="word", state="disabled")
+    output.grid(row=3, column=0, columnspan=3, sticky="nsew")
+
+    frm.columnconfigure(1, weight=1)
+    frm.rowconfigure(3, weight=1)
+
+    root.mainloop()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="TAG-style Pokémon card grading baseline")
-    parser.add_argument("--front", type=Path, required=True, help="Path to front card image")
+    parser.add_argument("--front", type=Path, help="Path to front card image")
     parser.add_argument("--back", type=Path, default=None, help="Path to back card image")
     parser.add_argument("--json", action="store_true", help="Print JSON output")
+    parser.add_argument("--gui", action="store_true", help="Launch the GUI card selector")
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
+
+    if args.gui:
+        launch_gui()
+        return
+
+    if args.front is None:
+        raise SystemExit("error: --front is required unless --gui is used")
 
     grader = TagLikeCardGrader()
     checks = grader.grade(front=args.front, back=args.back)
@@ -255,15 +335,7 @@ def main() -> None:
         print(json.dumps(asdict(checks), indent=2))
         return
 
-    print("=== Pokémon Card Check (TAG-style baseline) ===")
-    print(f"Centering L/R ratio : {checks.centering_lr_ratio:.3f}")
-    print(f"Centering T/B ratio : {checks.centering_tb_ratio:.3f}")
-    print(f"Centering score     : {checks.centering_score:.2f}/10")
-    print(f"Surface anomaly     : {checks.surface_anomaly_density:.4f}")
-    print(f"Surface score       : {checks.surface_score:.2f}/10")
-    print(f"Edge whitening      : {checks.edge_whitening_ratio:.4f}")
-    print(f"Edge score          : {checks.edge_score:.2f}/10")
-    print(f"Overall score       : {checks.overall_score:.2f}/10")
+    print(format_checks(checks))
 
 
 if __name__ == "__main__":
